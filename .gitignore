@@ -348,3 +348,10 @@ MigrationBackup/
 
 # Ionide (cross platform F# VS Code tools) working folder
 .ionide/
+
+# Rhetos
+/Bookstore.Service/rhetos-app.local.settings.json
+/Bookstore.Service/Logs
+/Bookstore.Service/Resources
+/Bookstore.Service/ConnectionStrings.config
+/Bookstore.Service/ExternalAppSettings.config
