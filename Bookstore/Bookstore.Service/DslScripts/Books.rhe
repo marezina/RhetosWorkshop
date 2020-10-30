@@ -77,11 +77,11 @@ Module Bookstore
     }
 
     Entity EmployeeDepartment
-{
-    Reference Employee;
-    Reference Department;
+    {
+        Reference Employee { Detail; }
+        Reference Department { Required; }
 
-    UniqueMultiple 'Employee Department';
-}
+        UniqueMultiple 'Employee Department';
+    }
 
 }
