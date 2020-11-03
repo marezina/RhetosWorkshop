@@ -1,6 +1,18 @@
 Module Bookstore
 {
 
+    SqlView ActiveEmployees <SQL\ActivePersons.sql>
+    {
+        SqlDependsOn Bookstore.Person;
+        AutodetectSqlDependencies;
+    }
+
+    SqlQueryable ActiveEmployeesQ
+        "SELECT * FROM ActiveEmployees"
+    {
+        SqlDependsOnView Bookstore.ActiveEmployees;
+    }
+
     Computed ExpectedBookRating 'repository =>
         {
             var books = repository.Bookstore.Book.Query()
@@ -44,10 +56,91 @@ Module Bookstore
         Integer NumberOfPages { MaxValue 5000; }
         Reference Author Bookstore.Person;
 
-        ItemFilter ContainsLockMark 'item => item.Title.Contains("lock")';
-		Lock ContainsLockMark '[Test] Title contains lock mark.';
+        ItemFilter LongBooks 'item => item.NumberOfPages >= 110';
+
+        ItemFilter CommonMisspelling 'book => book.Title.Contains("curiousity")';
+        InvalidData CommonMisspelling 'It is not allowed to enter misspelled word "curiousity". Please use "curiosity" instead.';
+
+        ItemFilter ForeignAuthorXWithComments 'item =>
+            item.Author.Name.StartsWith("X")
+            && item.Extension_ForeignBook.ID != null
+            && _domRepository.Bookstore.Comment.Subquery.Where(c => c.BookID == item.ID).Count() >= 3';
+
+        ComposableFilterBy LongBooks2 '(query, repository, parameter) =>
+            {
+                return query.Where(item => item.NumberOfPages >= 110);
+            }';
+
+        ComposableFilterBy LongBooks3 '(query, repository, parameter) =>
+            {
+                var filtered = query.Where(item => item.NumberOfPages >= parameter.MinimumPages);
+                if (parameter.ForeignBooksOnly == true)
+                    filtered = filtered.Where(item => item.Extension_ForeignBook.ID != null);
+                return filtered;
+            }';
+
+         FilterBy ComplexSearch '(repository, parameter) =>
+            {
+                var query = repository.Bookstore.Book.Query(item => item.NumberOfPages >= parameter.MinimumPages);
+                if (parameter.ForeignBooksOnly == true)
+                    query = query.Where(item => item.Extension_ForeignBook.ID != null);
+                Book[] books = query.ToSimple().ToArray();
+
+                if (parameter.MaskTitles == true)
+                    foreach (var book in books.Where(b => !string.IsNullOrEmpty(b.Title)))
+                        book.Title = book.Title.First() + "***" + book.Title.Last();
+
+                return books;
+            }';
+
+        ComposableFilterBy 'System.String[]' '(query, repository, titles) =>
+            {
+                return query.Where(book => titles.Contains(book.Title));
+            }';
+
+        ComposableFilterBy 'Bookstore.Person' '(query, repository, author) =>
+            {
+                return query.Where(book => book.AuthorID == author.ID
+                    || book.Author.Name == author.Name);
+            }';
 
         Logging { AllProperties; }
+    }
+
+    Parameter LongBooks2
+    {
+    }
+
+    Parameter LongBooks3
+    {
+        Integer MinimumPages;
+        Bool ForeignBooksOnly;
+    }
+
+    Parameter ComplexSearch
+    {
+        Integer MinimumPages;
+        Bool ForeignBooksOnly;
+        Bool MaskTitles;
+    }
+
+     Entity Disposal
+    {
+        Reference Book { Required; }
+        LongString Explanation { Required; }
+        DateTime EffectiveSince { CreationTime; }
+
+        ItemFilter ImportantBookExplanation 'item => item.Book.Title.Contains("important") && item.Explanation.Length < 50';
+        InvalidData ImportantBookExplanation 'When disposing an important book, the explanation should be at least 50 characters long.';
+
+        ItemFilter HighRating 'item => item.Book.Extension_BookRating.Rating > 100';
+        InvalidData HighRating 'You are not allowed to dispose a book with rating above 100.';
+    }
+
+    Entity BookRating
+    {
+        Extends Bookstore.Book;
+        Decimal Rating;
     }
 
     Entity Person
