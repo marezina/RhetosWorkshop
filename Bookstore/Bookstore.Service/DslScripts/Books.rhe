@@ -1,22 +1,70 @@
 Module Bookstore
 {
+
+    Computed ExpectedBookRating 'repository =>
+        {
+            var books = repository.Bookstore.Book.Query()
+                .Select(b =>
+                    new
+                    {
+                        b.ID,
+                        b.Title,
+                        IsForeign = b.Extension_ForeignBook.ID != null
+                    })
+                .ToList();
+
+            var ratings = new List<ExpectedBookRating>();
+            foreach (var book in books)
+            {
+                decimal rating = 0;
+
+                if (book.Title?.IndexOf("super", StringComparison.InvariantCultureIgnoreCase) >= 0)
+                    rating += 100;
+
+                if (book.Title?.IndexOf("great", StringComparison.InvariantCultureIgnoreCase) >= 0)
+                    rating += 50;
+
+                if (book.IsForeign)
+                    rating *= 1.2m;
+
+                ratings.Add(new ExpectedBookRating { ID = book.ID, Rating = rating });
+            }
+
+            return ratings.ToArray();
+        }'
+    {
+        Extends Bookstore.Book;
+        Decimal Rating;
+    }
+
     Entity Book
     {
         ShortString Code { Unique; Required; }
         ShortString Title { Required; }
-        Integer NumberOfPages;
+        Integer NumberOfPages { MaxValue 5000; }
         Reference Author Bookstore.Person;
+
+        ItemFilter ContainsLockMark 'item => item.Title.Contains("lock")';
+		Lock ContainsLockMark '[Test] Title contains lock mark.';
+
+        Logging { AllProperties; }
     }
 
     Entity Person
     {
+        Deactivatable;
         ShortString Name;
+
+        Logging;
     }
 
     Entity Comment
     {
         Reference Book { Detail; }
         LongString Text;
+        DateTime Created { CreationTime; }
+        DateTime Modified { ModificationTimeOf Bookstore.Comment.Text; }
+
     }
 
     Entity ChildrensBook
@@ -64,7 +112,7 @@ Module Bookstore
 
     Entity EducationRecord
     {
-        Date RecordDate;
+        Date RecordDate { DefaultValue 'item => DateTime.Now.Date'; }
         ShortString Description;
 
         Reference Employee { Detail; }
@@ -72,8 +120,10 @@ Module Bookstore
 
     Entity Department
     {
+        DenyUserEdit;
         ShortString Code { Unique; }
         ShortString Description;
+        DateTime Created { CreationTime; }
     }
 
     Entity EmployeeDepartment
@@ -83,5 +133,80 @@ Module Bookstore
 
         UniqueMultiple 'Employee Department';
     }
+
+    Browse BookGrid Bookstore.Book
+    {
+        Take Code;
+        Take Title;
+        Take 'Author.Name';
+        Take TranslatorName 'Extension_ForeignBook.Translator.Name';
+        Take NumberOfComments 'Extension_BookInfo.NumberOfComments';
+    }
+
+     SqlQueryable TopicsForBook <SQL\TopicsForBook.sql>
+    {
+        Extends Bookstore.Book;
+        Integer NumberOfTopics;
+
+        AutodetectSqlDependencies;
+    }
+    
+    SqlQueryable BookInfo <SQL\BookInfo.sql>
+    {
+        Extends Bookstore.Book;
+        Integer NumberOfComments;
+
+        AutodetectSqlDependencies;
+    }
+
+    Browse ListOfBooks Bookstore.Book
+    {
+        Take Title;
+        Take 'Author.Name';
+        Take NumberOfTopics 'Extension_TopicsForBook.NumberOfTopics';
+    }
+
+    Hardcoded Genre
+    {
+        LongString ShortDescription;
+        Bool Fiction;
+
+        Entry Fantasy
+        {
+            Value ShortDescription 'Fantasy is a genre of speculative fiction set in a fictional universe';
+            Value Fiction 1;
+        }
+
+        Entry Crime
+        {
+            Value ShortDescription 'Suspense and mystery are key elements that are nearly ubiquitous to the genre';
+            Value Fiction 0;
+        }
+    }
+
+    Action Insert5Books
+        '(parameter, repository, userInfo) =>
+        {
+            for (int i = 0; i < 5; i++)
+            {
+                var newBook = new Bookstore.Book { Code = "+++"+i, Title = "New book" };
+                repository.Bookstore.Book.Insert(newBook);
+            }
+        }';
+
+    Action InsertManyBooks
+    '(parameter, repository, userInfo) =>
+    {
+        for (int i = 0; i < parameter.NumberOfBooks; i++)
+        {
+            string newTitle = parameter.Title;
+            var newBook = new Bookstore.Book { Code = "B+++" + i, Title = newTitle };
+            repository.Bookstore.Book.Insert(newBook);
+        }
+    }'
+{
+    Integer NumberOfBooks;
+    ShortString Title;
+}
 
 }
