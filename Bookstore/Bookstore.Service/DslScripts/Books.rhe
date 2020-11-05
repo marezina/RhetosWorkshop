@@ -55,6 +55,43 @@ Module Bookstore
         ShortString Title { Required; }
         Integer NumberOfPages { MaxValue 5000; }
         Reference Author Bookstore.Person;
+        Reference AssignedTo Bookstore.Employee;
+
+        RowPermissions
+        {
+
+            AllowRead EveryoneCanRead 'context =>
+                {
+                    return book => book.AssignedTo.ID != null;
+                }';
+
+            // Better:
+            AllowRead EveryoneCanRead2 'context =>
+                {
+                    return book => true;
+                }';
+
+            // Shorter:
+            AllowRead EveryoneCanRead3 'context => book => true';
+
+            //====================
+
+            Allow OwnerCanWrite 'context =>
+                {
+                    Guid employeeId = context.Repository
+                        .Bookstore.Employee.Query()
+                        .Where(e => e.UserName == context.UserInfo.UserName)
+                        .Select( e => e.ID)
+                        .SingleOrDefault();
+                    return book => book.AssignedTo.ID == employeeId;
+                }';
+
+            // Better:
+            AllowWrite OwnerCanWrite2 'context =>
+                {
+                    return book => book.AssignedTo.UserName == context.UserInfo.UserName;
+                }';
+        }
 
         ItemFilter LongBooks 'item => item.NumberOfPages >= 110';
 
@@ -145,9 +182,9 @@ Module Bookstore
 
     Entity Person
     {
+        
         Deactivatable;
         ShortString Name;
-
         Logging;
     }
 
@@ -157,7 +194,27 @@ Module Bookstore
         LongString Text;
         DateTime Created { CreationTime; }
         DateTime Modified { ModificationTimeOf Bookstore.Comment.Text; }
+        RowPermissions
+        {
+            AllowRead EveryoneCanRead 'context =>
+                {
+                    return comment => comment.Book.AssignedTo.ID != null;
+                }';
 
+            Allow OwnerCanWrite 'context =>
+                {
+                    Guid employeeId = context.Repository
+                        .Bookstore.Employee.Query()
+                        .Where(e => e.UserName == context.UserInfo.UserName)
+                        .Select(e => e.ID)
+                        .SingleOrDefault();
+
+                    return comment => comment.Book.AssignedTo.ID == employeeId;
+                }';
+
+            // Better:
+            InheritFrom Bookstore.Comment.Book;
+        }
     }
 
     Entity ChildrensBook
@@ -180,6 +237,7 @@ Module Bookstore
     Entity Topic
     {
         ShortString Name { Unique; Required; }
+
     }
 
     Entity BookTopic
@@ -192,8 +250,24 @@ Module Bookstore
 
     Entity Employee
     {
-        ShortString Name;
+        ShortString UserName;
         ShortString VATNumber { Unique; }
+        DateTime LastUpdate { DefaultValue 'item => null'; }
+
+        SaveMethod
+        {
+            Initialization UpdateLastUpdate
+                '
+                    foreach (var item in updatedNew)
+                        item.LastUpdate = DateTime.Now;
+                ';
+        }
+    }
+
+    Entity TestCodeTable
+    {
+        CodeTable;
+        MonitoredRecord;
     }
 
     Entity Manager
@@ -217,6 +291,7 @@ Module Bookstore
         ShortString Code { Unique; }
         ShortString Description;
         DateTime Created { CreationTime; }
+        MonitoredRecord;
     }
 
     Entity EmployeeDepartment
