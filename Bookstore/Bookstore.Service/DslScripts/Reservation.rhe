@@ -1,0 +1,49 @@
+﻿Module Bookstore
+{
+	Hardcoded ReservationStatus
+    {
+        Entry Free;
+        Entry WaitingForApprove;
+        Entry Reserved;
+    }
+    Entity Reservation
+    {
+        Reference Book { Detail; }
+        Reference Person;
+
+        DateTime CreatedAt { CreationTime; }
+
+        Is Bookstore.ReservationEvent 'Creating'
+        {
+            Implements Bookstore.ReservationEvent.EventTime "CreatedAt";
+            Implements Bookstore.ReservationEvent.Reservation "ID";
+            Implements Bookstore.ReservationEvent.Status Bookstore.ReservationStatus.WaitingForApprove;
+        }
+    }   
+    Polymorphic ReservationEvent
+    {
+        DateTime EventTime;
+        Reference Reservation;
+        Reference Status Bookstore.ReservationStatus;
+    }
+    Entity ApproveReservation
+    {
+        DateTime EventTime { CreationTime; }
+        Reference Reservation;
+
+        Is Bookstore.ReservationEvent
+        {
+            Implements Bookstore.ReservationEvent.Status Bookstore.ReservationStatus.Reserved;
+        }
+    }
+    Entity ReturnBook
+    {
+        DateTime EventTime { CreationTime; }
+        Reference Reservation;
+
+        Is Bookstore.ReservationEvent
+        {
+            Implements Bookstore.ReservationEvent.Status Bookstore.ReservationStatus.Free;
+        }
+    }
+}

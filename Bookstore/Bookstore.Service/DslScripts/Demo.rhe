@@ -1,0 +1,39 @@
+﻿Module Demo
+{
+	Polymorphic SalesItem
+	{
+		ShortString Code;
+		Money Price;
+	}
+	Entity Book
+	{
+		Integer NumberOfPages;
+		ShortString Code;
+		Money Price;
+
+		Is Demo.SalesItem;
+	}
+	Entity Book2
+	{
+		Integer NumberOfPages;
+		ShortString Code;
+		Money Price;
+
+		Is Demo.SalesItem
+		{
+			SqlImplementation "SELECT b.ID, b.Code, Price = b.Price FROM Demo.Book2 b"
+			{
+				AutoDetectSqlDependencies;
+			}
+		}
+
+	}
+	Entity Food
+	{
+		Integer Calories;
+		ShortString Code;
+		Money Price;
+
+		Is Demo.SalesItem;
+	}
+}

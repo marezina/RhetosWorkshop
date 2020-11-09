@@ -49,49 +49,109 @@ Module Bookstore
         Decimal Rating;
     }
 
+    SqlQueryable ComputeBookInfo
+        "
+            SELECT
+                b.ID,
+                NumberOfComments = COUNT(bc.ID)
+            FROM
+                Bookstore.Book b
+                LEFT JOIN Bookstore.Comment bc ON bc.BookID = b.ID
+            GROUP BY
+                b.ID
+        "
+    {
+        Extends Bookstore.Book;
+        Integer NumberOfComments;
+
+        ChangesOnLinkedItems Bookstore.Comment.Book;
+    }
+
+    Entity BookInfo
+    {
+        ComputedFrom Bookstore.ComputeBookInfo
+        {
+            AllProperties;
+            KeepSynchronized;
+        }
+    }
+
+    Computed ComputeBookRating
+        'repository =>
+        {
+            var allBooksIds = repository.Bookstore.Book.Query().Select(b => b.ID).ToArray();
+            return this.Load(allBooksIds).ToArray();
+        }'
+    {
+        Extends Bookstore.Book;
+        Decimal Rating;
+
+        FilterBy 'IEnumerable<Guid>' '(repository, booksIds) =>
+            {
+                // Collecting the input data from the database:
+                var ratingInput = repository.Bookstore.Book.Query(booksIds)
+                    .Select(b =>
+                        new Bookstore.Algorithms.RatingInput
+                        {
+                            BookId = b.ID,
+                            Title = b.Title,
+                            IsForeign = b.Extension_ForeignBook.ID != null
+                        });
+
+                // Calling the algorithm implemented in the external class "RatingSystem":
+                var ratingSystem = new Bookstore.Algorithms.RatingSystem();
+                var ratings = ratingSystem.ComputeRating(ratingInput);
+
+                // Mapping the results to the "ComputeBookRating" output:
+                return ratings
+                    .Select(rating => new ComputeBookRating { ID = rating.BookId, Rating = rating.Value })
+                    .ToArray();
+            }';
+
+        ChangesOnBaseItem;
+        ChangesOnChangedItems Bookstore.ForeignBook 'IEnumerable<Guid>'
+            'changedItems => changedItems.Select(fb => fb.ID)';
+    }
+
+    // One class per assembly is enough for external reference.
+    ExternalReference 'Bookstore.Algorithms.RatingSystem, Bookstore.Algorithms';
+
+    Entity BookRating
+    {
+        ComputedFrom Bookstore.ComputeBookRating
+        {
+            AllProperties;
+            KeepSynchronized;
+        }
+    }
+
+   
+
+    Polymorphic SalesItem
+	{
+		ShortString Code;
+		Money Price;
+        ShortString Description;
+	}
+
     Entity Book
     {
-        ShortString Code { Unique; Required; }
+        ShortString Code { Unique; Required; Autocode; }
         ShortString Title { Required; }
+        ShortString Description;
         Integer NumberOfPages { MaxValue 5000; }
+        Money Price;
         Reference Author Bookstore.Person;
         Reference AssignedTo Bookstore.Employee;
 
-        RowPermissions
+        Is Bookstore.SalesItem
         {
-
-            AllowRead EveryoneCanRead 'context =>
-                {
-                    return book => book.AssignedTo.ID != null;
-                }';
-
-            // Better:
-            AllowRead EveryoneCanRead2 'context =>
-                {
-                    return book => true;
-                }';
-
-            // Shorter:
-            AllowRead EveryoneCanRead3 'context => book => true';
-
-            //====================
-
-            Allow OwnerCanWrite 'context =>
-                {
-                    Guid employeeId = context.Repository
-                        .Bookstore.Employee.Query()
-                        .Where(e => e.UserName == context.UserInfo.UserName)
-                        .Select( e => e.ID)
-                        .SingleOrDefault();
-                    return book => book.AssignedTo.ID == employeeId;
-                }';
-
-            // Better:
-            AllowWrite OwnerCanWrite2 'context =>
-                {
-                    return book => book.AssignedTo.UserName == context.UserInfo.UserName;
-                }';
+            Where 'Price is not null';
+            Implements Bookstore.SalesItem.Description "(SELECT TOP (1) b.Title + ' ' + p.Name FROM Bookstore.Book b JOIN Bookstore.Person p ON b.AuthorID=p.ID)";
+            SqlDependsOn Bookstore.Person;
+            SqlDependsOn Bookstore.Book;
         }
+
 
         ItemFilter LongBooks 'item => item.NumberOfPages >= 110';
 
@@ -194,27 +254,7 @@ Module Bookstore
         LongString Text;
         DateTime Created { CreationTime; }
         DateTime Modified { ModificationTimeOf Bookstore.Comment.Text; }
-        RowPermissions
-        {
-            AllowRead EveryoneCanRead 'context =>
-                {
-                    return comment => comment.Book.AssignedTo.ID != null;
-                }';
-
-            Allow OwnerCanWrite 'context =>
-                {
-                    Guid employeeId = context.Repository
-                        .Bookstore.Employee.Query()
-                        .Where(e => e.UserName == context.UserInfo.UserName)
-                        .Select(e => e.ID)
-                        .SingleOrDefault();
-
-                    return comment => comment.Book.AssignedTo.ID == employeeId;
-                }';
-
-            // Better:
-            InheritFrom Bookstore.Comment.Book;
-        }
+        
     }
 
     Entity ChildrensBook
@@ -319,7 +359,7 @@ Module Bookstore
         AutodetectSqlDependencies;
     }
     
-    SqlQueryable BookInfo <SQL\BookInfo.sql>
+    SqlQueryable BookInfo2 <SQL\BookInfo.sql>
     {
         Extends Bookstore.Book;
         Integer NumberOfComments;
@@ -372,9 +412,9 @@ Module Bookstore
             repository.Bookstore.Book.Insert(newBook);
         }
     }'
-{
-    Integer NumberOfBooks;
-    ShortString Title;
-}
+    {
+        Integer NumberOfBooks;
+        ShortString Title;
+    }
 
 }
